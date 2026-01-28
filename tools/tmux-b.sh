@@ -57,37 +57,57 @@ send_and_enter "$SESSION:main.2" "cd \"$ROOT_DIR\"; $start_codex"
 send_and_enter "$SESSION:main.3" "cd \"$ROOT_DIR\"; $start_codex"
 
 # Role prompts: send one line at a time to avoid paste-mode buffering
+# Role prompts (IDLE mode):
+# On startup, agents must NOT start working or planning.
+# They should print READY and wait for a dispatch message that begins with "Read: b/tasks/".
 send_lines "$SESSION:main.0" \
   "You are SHOGUN." \
-  "Read task YAML at: b/tasks/TASK-YYYYMMDD-xxxx-ROLE.yaml" \
-  "Follow constraints." \
-  "Write result YAML to: b/results/RESULT-YYYYMMDD-xxxx.yaml" \
-  "If you propose code changes, produce a patch file and reference it in result." \
-  "Do NOT apply changes to repo unless write_policy=allow_edit."
+  "Startup behavior: do nothing. Print 'READY (SHOGUN)' and wait." \
+  "Do NOT plan, review, or propose changes unless explicitly dispatched." \
+  "You must ONLY act when you receive a dispatch message that begins with:" \
+  "  Read: b/tasks/" \
+  "When dispatched, open the YAML at that path, follow constraints, and coordinate the workflow." \
+  "You may ask the human for approvals when needed." \
+  "Never apply changes unless write_policy=allow_edit."
 
 send_lines "$SESSION:main.1" \
   "You are KARO." \
-  "Read task YAML at: b/tasks/TASK-YYYYMMDD-xxxx-ROLE.yaml" \
-  "Follow constraints." \
-  "Write result YAML to: b/results/RESULT-YYYYMMDD-xxxx.yaml" \
-  "If you propose code changes, produce a patch file and reference it in result." \
-  "Do NOT apply changes to repo unless write_policy=allow_edit."
+  "Startup behavior: do nothing. Print 'READY (KARO)' and wait." \
+  "Do NOT plan, review, or propose changes unless explicitly dispatched." \
+  "You must ONLY act when you receive a dispatch message that begins with:" \
+  "  Read: b/tasks/" \
+  "When dispatched, open the YAML at that path and do exactly what it requests." \
+  "Create the expected result file path under outputs.expected[0] (or b/results/)." \
+  "If you propose code changes, produce a patch file and reference it in the result YAML." \
+  "Never apply changes unless write_policy=allow_edit."
 
 send_lines "$SESSION:main.2" \
   "You are ASHIGARU1." \
-  "Read task YAML at: b/tasks/TASK-YYYYMMDD-xxxx-ROLE.yaml" \
-  "Follow constraints." \
-  "Write result YAML to: b/results/RESULT-YYYYMMDD-xxxx.yaml" \
-  "If you propose code changes, produce a patch file and reference it in result." \
-  "Do NOT apply changes to repo unless write_policy=allow_edit."
+  "Startup behavior: do nothing. Print 'READY (ASHIGARU1)' and wait." \
+  "Do NOT plan, review, or propose changes unless explicitly dispatched." \
+  "You must ONLY act when you receive a dispatch message that begins with:" \
+  "  Read: b/tasks/" \
+  "When dispatched, open the YAML at that path and do exactly what it requests." \
+  "Create the expected result file path under outputs.expected[0] (or b/results/)." \
+  "If you propose code changes, produce a patch file and reference it in the result YAML." \
+  "Never apply changes unless write_policy=allow_edit."
 
 send_lines "$SESSION:main.3" \
   "You are ASHIGARU2." \
-  "Read task YAML at: b/tasks/TASK-YYYYMMDD-xxxx-ROLE.yaml" \
-  "Follow constraints." \
-  "Write result YAML to: b/results/RESULT-YYYYMMDD-xxxx.yaml" \
-  "If you propose code changes, produce a patch file and reference it in result." \
-  "Do NOT apply changes to repo unless write_policy=allow_edit."
+  "Startup behavior: do nothing. Print 'READY (ASHIGARU2)' and wait." \
+  "Do NOT plan, review, or propose changes unless explicitly dispatched." \
+  "You must ONLY act when you receive a dispatch message that begins with:" \
+  "  Read: b/tasks/" \
+  "When dispatched, open the YAML at that path and do exactly what it requests." \
+  "Create the expected result file path under outputs.expected[0] (or b/results/)." \
+  "If you propose code changes, produce a patch file and reference it in the result YAML." \
+  "Never apply changes unless write_policy=allow_edit."
+
+# Trigger initial READY output (so panes are visibly idle)
+send_and_enter "$SESSION:main.0" "READY (SHOGUN)"
+send_and_enter "$SESSION:main.1" "READY (KARO)"
+send_and_enter "$SESSION:main.2" "READY (ASHIGARU1)"
+send_and_enter "$SESSION:main.3" "READY (ASHIGARU2)"
 
 tmux select-pane -t "$SESSION:main.0"
 tmux attach -t "$SESSION"
