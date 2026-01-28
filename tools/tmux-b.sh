@@ -17,6 +17,15 @@ tmux split-window -h -t "$SESSION:main"
 tmux split-window -v -t "$SESSION:main.0"
 tmux split-window -v -t "$SESSION:main.1"
 
+tmux select-pane -t "$SESSION:main.0"
+tmux select-pane -T "shogun"
+tmux select-pane -t "$SESSION:main.1"
+tmux select-pane -T "karo"
+tmux select-pane -t "$SESSION:main.2"
+tmux select-pane -T "ashigaru1"
+tmux select-pane -t "$SESSION:main.3"
+tmux select-pane -T "ashigaru2"
+
 start_codex='command -v codex >/dev/null 2>&1 && codex || { echo "codex not found; staying in shell"; exec "${SHELL:-/bin/bash}"; }'
 
 tmux send-keys -t "$SESSION:main.0" "cd \"$ROOT_DIR\"; $start_codex" C-m
