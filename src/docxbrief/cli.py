@@ -107,7 +107,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "b":
         if args.b_cmd == "dispatch":
-            dispatch_task(Path(args.task_yaml))
+            try:
+                dispatch_task(Path(args.task_yaml))
+            except RuntimeError as exc:
+                print(str(exc))
+                return 1
             return 0
         if args.b_cmd == "await":
             result = await_result(Path(args.task_yaml), timeout=float(args.timeout))

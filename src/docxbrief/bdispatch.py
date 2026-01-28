@@ -46,7 +46,10 @@ def _session_name() -> str:
 def _list_panes(session: str) -> list[tuple[str, str, str]]:
     fmt = "#{pane_id}\t#{pane_index}\t#{pane_title}"
     cmd = ["tmux", "list-panes", "-t", session, "-F", fmt]
-    out = subprocess.check_output(cmd, text=True)
+    try:
+        out = subprocess.check_output(cmd, text=True)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"tmux session not found: {session}") from exc
     panes = []
     for line in out.strip().splitlines():
         if not line.strip():
