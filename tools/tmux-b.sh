@@ -15,6 +15,7 @@ tmux new-session -d -s "$SESSION" -n main
 tmux split-window -h -t "$SESSION:main"
 tmux split-window -v -t "$SESSION:main.0"
 tmux split-window -v -t "$SESSION:main.1"
+tmux select-layout -t "$SESSION:main" tiled
 
 tmux set-option -t "$SESSION" pane-border-status top
 tmux set-option -t "$SESSION" pane-border-format "#[reverse] #T #[default]"
