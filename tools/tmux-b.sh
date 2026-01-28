@@ -6,12 +6,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cd "$ROOT_DIR"
 
-if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-  tmux new-session -d -s "$SESSION" -n main
+# Always start from a clean session to avoid agents continuing old context.
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux kill-session -t "$SESSION"
 fi
-
-tmux select-window -t "$SESSION:main"
-tmux kill-pane -a -t "$SESSION:main" 2>/dev/null || true
+tmux new-session -d -s "$SESSION" -n main
 
 tmux split-window -h -t "$SESSION:main"
 tmux split-window -v -t "$SESSION:main.0"
