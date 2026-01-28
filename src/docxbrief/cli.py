@@ -114,9 +114,9 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             return 0
         if args.b_cmd == "await":
-            result = await_result(Path(args.task_yaml), timeout=float(args.timeout))
+            result, info = await_result(Path(args.task_yaml), timeout=float(args.timeout))
             if result is None:
-                print("Result not found before timeout.")
+                print(f"Result not found before timeout. {info}")
                 return 1
             print(result.read_text(encoding="utf-8"))
             return 0

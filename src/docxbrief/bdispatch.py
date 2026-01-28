@@ -142,30 +142,42 @@ def dispatch_task(task_path: Path) -> None:
     _log_line(Path("b/logs/dispatch.log"), f"dispatch {info.task_id} -> {info.assignee} ({session})")
 
 
-def _find_result_by_task_id(task_id: str) -> Path | None:
+def _find_latest_result_by_task_id(task_id: str) -> Path | None:
     results_dir = Path("b/results")
     if not results_dir.exists():
         return None
+    latest_path: Path | None = None
+    latest_mtime = -1.0
     for path in results_dir.glob("RESULT-*.yaml"):
         try:
             data = _load_yaml(path)
         except Exception:
             continue
         if str(data.get("task_id", "")).strip() == task_id:
-            return path
-    return None
+            mtime = path.stat().st_mtime
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                latest_path = path
+    return latest_path
 
 
-def await_result(task_path: Path, timeout: float) -> Path | None:
+def await_result(task_path: Path, timeout: float) -> tuple[Path | None, str]:
     info = _task_info(task_path)
     deadline = time.monotonic() + timeout
-    while True:
-        for expected in info.expected_results:
+    if info.expected_results:
+        expected = info.expected_results[0]
+        description = f"expected: {expected.as_posix()}"
+        while True:
             if expected.exists():
-                return expected
-        match = _find_result_by_task_id(info.task_id)
+                return expected, description
+            if time.monotonic() >= deadline:
+                return None, description
+            time.sleep(0.5)
+    description = f"searched: b/results/*.yaml with task_id == {info.task_id}"
+    while True:
+        match = _find_latest_result_by_task_id(info.task_id)
         if match is not None:
-            return match
+            return match, description
         if time.monotonic() >= deadline:
-            return None
+            return None, description
         time.sleep(0.5)
