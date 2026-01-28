@@ -10,6 +10,7 @@ from .build import build_summary, update_summary
 from .shell import run_shell
 from .status import show_status
 from .reset import reset_project
+from .bdispatch import dispatch_task, await_result
 
 
 def _add_common_args(p: argparse.ArgumentParser) -> None:
@@ -48,6 +49,16 @@ def main(argv: list[str] | None = None) -> int:
     _add_common_args(p_reset)
     p_reset.add_argument("--all", action="store_true", help="Also remove output summary.adoc")
     p_reset.add_argument("--yes", action="store_true", help="Skip confirmation")
+
+    p_b = sub.add_parser("b", help="Stage B commands (tmux dispatch/await).")
+    b_sub = p_b.add_subparsers(dest="b_cmd", required=True)
+
+    p_dispatch = b_sub.add_parser("dispatch", help="Dispatch a task YAML to the assignee pane.")
+    p_dispatch.add_argument("task_yaml", help="Path to task YAML (b/tasks/*.yaml)")
+
+    p_await = b_sub.add_parser("await", help="Wait for result YAML for a task.")
+    p_await.add_argument("task_yaml", help="Path to task YAML (b/tasks/*.yaml)")
+    p_await.add_argument("--timeout", type=float, default=30.0, help="Timeout seconds (default: 30)")
 
     args = parser.parse_args(argv)
 
@@ -90,6 +101,18 @@ def main(argv: list[str] | None = None) -> int:
         reset_project(cfg, remove_summary=bool(args.all), remove_state=True)
         print("Reset complete.")
         return 0
+
+    if args.cmd == "b":
+        if args.b_cmd == "dispatch":
+            dispatch_task(Path(args.task_yaml))
+            return 0
+        if args.b_cmd == "await":
+            result = await_result(Path(args.task_yaml), timeout=float(args.timeout))
+            if result is None:
+                print("Result not found before timeout.")
+                return 1
+            print(result.read_text(encoding="utf-8"))
+            return 0
 
     parser.print_help()
     return 2

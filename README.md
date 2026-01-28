@@ -107,6 +107,23 @@ Recommended panes:
 
 ---
 
+## Stage B (manual dispatch MVP)
+
+Start the Stage B tmux session:
+```bash
+bash tools/tmux-b.sh
+```
+
+Dispatch a task to a pane by assignee:
+```bash
+docxbrief b dispatch b/tasks/TASK-20260128-3f2a-ashigaru1.yaml
+```
+
+Wait for a result YAML (prints on success):
+```bash
+docxbrief b await b/tasks/TASK-20260128-3f2a-ashigaru1.yaml --timeout 60
+```
+
 ## Troubleshooting
 
 ### Python version issues (especially 3.14+)

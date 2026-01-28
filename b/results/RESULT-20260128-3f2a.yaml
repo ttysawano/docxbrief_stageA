@@ -1,0 +1,20 @@
+version: 1
+task_id: "TASK-20260128-3f2a"
+assignee: "ashigaru1"
+status: "done"
+summary: >
+  Added a changelog-clear command and helper to wipe manifest changelog entries without resetting full state.
+artifacts:
+  patches:
+    - path: "b/results/patch-20260128-3f2a.diff"
+      apply: "git apply b/results/patch-20260128-3f2a.diff"
+verification:
+  steps:
+    - "docxbrief changelog-clear --help"
+    - "docxbrief changelog-clear --yes"
+    - "docxbrief reset --help"
+risks:
+  - "If repo has diverged, the patch may not apply cleanly."
+  - "Clearing changelog edits manifest.json; ensure this is intended for the project."
+next_actions:
+  - "karo: review patch and apply if acceptable"

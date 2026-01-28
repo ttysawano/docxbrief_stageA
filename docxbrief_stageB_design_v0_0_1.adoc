@@ -1,0 +1,265 @@
+= docxbrief Stage B 設計書（Codex + tmux マルチエージェント）
+:revnumber: v0.0.1
+:revdate: 2026-01-28
+:toc:
+:toclevels: 3
+:sectnums:
+:lang: ja
+
+== 1. 目的と前提
+
+=== 1.1 目的（Stage Bで増やす価値）
+Stage A は「オフライン・決定論（LLMなし）」で `.docx` → `summary.adoc` を生成する。
+Stage B では、以下を追加する。
+
+* Codex CLI を tmux の複数ペインで起動し、役割分担した“擬似マルチエージェント”で作業を進める
+* 人間（ユーザー）の承認ポイントを明確化し、「勝手にファイルを書き換えない」安全な開発体験を維持する
+* APIコール回数を抑えるために、エージェント間通信は原則として「ファイル（YAML/テキスト）＋ tmux send-keys」で行う
+* “イベント駆動”で進行する（ポーリング最小化）
+
+=== 1.2 非目的（最初はやらない）
+* 完全自律の長時間実行（暴走リスクが高い）
+* ネットワーク越しの分散（まずローカル完結）
+* 高度な自動マージ（ユーザー承認＋レビュー前提）
+
+=== 1.3 動作環境
+* macOS / Ubuntu（tmux利用）
+* Codex CLI（モデルは任意だが最初は `gpt-5.2-codex` で統一）
+* Stage B は Stage A のリポジトリ上に追加実装（`b/` 配下）
+
+== 2. 役割（プロセス）と責務
+
+=== 2.1 役割一覧
+* Shogun（将軍）: 人間との対話、全体方針、承認ゲート、タスク発行の最終決裁
+* Karo（家老）: タスク分解、依存関係管理、並列化、結果の集約案作成
+* Ashigaru（足軽）: 個別タスクの実作業（コード変更案、テキスト生成、検証、結果記述）
+
+=== 2.2 Stage B における責務の境界
+* Shogun は「ユーザー承認なしに repo を変更しない」
+* Karo/Ashigaru は「変更提案（パッチ/差分/手順）を results に書く」が、適用は Shogun の承認後
+* 原則、Ashigaru は repo を直接編集しない（最初は）
+** 例外：教育用に“手元の作業”として編集させる場合は、明示的に `permissions` を上げる
+
+== 3. Stage B のI/O取り決め（おすすめプロトコル）
+
+この章が Stage B の核。まずここを固定し、必要に応じて変更する。
+
+=== 3.1 ディレクトリ構成（Stage B 追加）
+[cols="1,3",options="header"]
+|===
+| パス | 意味
+| `b/inbox/` | 人間（ユーザー）からの要求を置く（任意）
+| `b/tasks/` | Shogun/Karo が発行するタスクYAML（入力）
+| `b/work/` | 足軽が作業中に生成する一時成果物（任意）
+| `b/results/` | 足軽の成果物（result YAML/patch/log/notes）
+| `b/state/` | ロック・進行状況・セッション情報（機械可読）
+| `b/logs/` | 監査用ログ（dispatch/ack/approval）
+|===
+
+=== 3.2 “ファイルが真実” ルール（File-as-Truth）
+* エージェント間の合意や状態はファイルで表現する（YAML/テキスト）
+* tmux send-keys は「通知・起動」だけに使い、内容のソースは常にファイル
+* これにより、APIコールなしでも「今何が起きているか」を人間が追える
+
+=== 3.3 タスクYAML（Task Spec v1）
+ファイル名規約：
+`b/tasks/TASK-{yyyyMMdd}-{shortid}-{role}.yaml`
+例： `b/tasks/TASK-20260128-3f2a-ashigaru1.yaml`
+
+最小スキーマ（v1）：
+[source,yaml]
+----
+version: 1
+id: "TASK-20260128-3f2a"
+issued_at: "2026-01-28T12:34:56+09:00"
+issuer: "shogun"          # shogun|karo
+assignee: "ashigaru1"     # karo|ashigaru1..N
+title: "Implement reset command"
+objective: >
+  Add docxbrief reset + changelog clear commands.
+inputs:
+  repo_root: "."
+  files:
+    - "src/docxbrief/cli.py"
+outputs:
+  expected:
+    - "b/results/RESULT-20260128-3f2a.yaml"
+acceptance:
+  - "Provides patch or exact code edits"
+  - "Explains how to verify"
+constraints:
+  network: "disallow"     # disallow|allow (Stage B 初期は disallow 推奨)
+  write_policy: "no_direct_edit"  # no_direct_edit|allow_edit
+handoff:
+  return_to: "karo"
+----
+
+設計意図：
+* `constraints.network` を明示し、ネットアクセスの有無をタスク単位で制御する
+* `write_policy` により「直接編集してよいか」をタスク単位で制御する
+
+=== 3.4 結果YAML（Result Spec v1）
+ファイル名規約：
+`b/results/RESULT-{yyyyMMdd}-{shortid}.yaml`
+
+[source,yaml]
+----
+version: 1
+task_id: "TASK-20260128-3f2a"
+assignee: "ashigaru1"
+status: "done"          # done|needs-info|blocked|failed
+summary: >
+  Added reset command handlers and helper functions.
+artifacts:
+  patches:
+    - path: "b/results/patch-3f2a.diff"
+      apply: "git apply b/results/patch-3f2a.diff"
+  notes:
+    - path: "b/results/notes-3f2a.md"
+verification:
+  steps:
+    - "pip install -e ."
+    - "docxbrief reset --help"
+risks:
+  - "If repo has diverged, patch may not apply cleanly."
+next_actions:
+  - "shogun: review patch and approve"
+----
+
+=== 3.5 状態管理（State）
+Stage B 初期は最小でよい。おすすめは “ロックファイル” と “セッション宣言”。
+
+==== 3.5.1 ロック（排他）
+* `b/state/lock-ashigaru1` の存在＝ ashigaru1 は作業中
+* lock ファイル内容は YAML で task_id と開始時刻を書く
+
+[source,yaml]
+----
+task_id: "TASK-20260128-3f2a"
+started_at: "2026-01-28T12:35:10+09:00"
+----
+
+==== 3.5.2 セッション宣言（Session）
+* `b/state/session.yaml` に pane 名、tmux セッション名、モデル等を書く
+* 人間が現状把握しやすくする
+
+=== 3.6 承認プロトコル（Approval Gate v1）
+Stage B の重要点：成果物の適用は “承認ファイル” が揃ってから。
+
+* 足軽： `RESULT-....yaml` と patch を出す
+* 家老：集約して Shogun にレビュー依頼を出す（`b/state/approval-request-*.yaml`）
+* Shogun：承認したら `b/state/approved-*.yaml` を置く
+* apply は Shogun が実行（または Shogun の指示で人間が実行）
+
+承認ファイル例：
+[source,yaml]
+----
+task_id: "TASK-20260128-3f2a"
+approved_by: "shogun"
+approved_at: "2026-01-28T13:10:00+09:00"
+artifacts:
+  - "b/results/patch-3f2a.diff"
+----
+
+== 4. tmux 構成（MVP）
+
+=== 4.1 セッション/ペイン設計
+MVP は 4 ペインで十分：
+
+* pane0: shogun
+* pane1: karo
+* pane2: ashigaru1
+* pane3: ashigaru2
+
+=== 4.2 起動スクリプト（案）
+* `tools/tmux-b.sh` を追加
+* 各ペインで `codex` を起動し、初期プロンプト（役割/ルール）を貼る
+* shogun 側で `b/` の監視（手動でもOK、後で watchdog）
+
+== 5. Dispatch（tmux send-keys の使い方）
+
+=== 5.1 原則
+* send-keys は「タスクファイルを読め」だけ送る
+* 具体的内容は `b/tasks/...yaml` を開かせる
+
+=== 5.2 メッセージテンプレ（推奨）
+* Ashigaru への指示：
+----
+You are ASHIGARU1.
+Read task YAML at: b/tasks/TASK-....yaml
+Follow constraints.
+Write result YAML to: b/results/RESULT-....yaml
+If you propose code changes, produce a patch file and reference it in result.
+Do NOT apply changes to repo unless write_policy=allow_edit.
+----
+
+== 6. イベント駆動（後で入れるが方針は決める）
+
+=== 6.1 watch の責務
+* `b/tasks/` に新規ファイルが来たら dispatch
+* `b/results/` に結果が来たら Karo→Shogun に通知（or state更新）
+
+=== 6.2 実装候補
+* Python `watchdog` を採用（macOS/Linux両対応）
+* 最初は “手動dispatch” でよい（仕様が固まってから自動化）
+
+== 7. ネットワークアクセス方針
+
+=== 7.1 初期は disallow 推奨
+* 足軽が web を見ると「正しいが不統一」になりやすい
+* 教材としては “オフラインで再現” が価値
+
+=== 7.2 allow を使うときのルール
+* `constraints.network=allow` のタスクに限定
+* 取得した情報は `notes-*.md` に出典を残す（URL直書きは可、ただし最終成果物には引用方針を統一）
+* 重要な仕様・バージョン情報は “固定化” して成果物に書く
+
+== 8. Stage B のマイルストーン
+
+=== 8.1 B-0（今やる）: I/Oプロトコル確定
+* この設計書（Task/Result/Approval/Lock）を採用
+* `b/` ディレクトリを repo に追加
+
+=== 8.2 B-1: 手動dispatch MVP
+* `tools/tmux-b.sh` で 4 pane 起動
+* 手で task YAML を置く
+* Shogun が send-keys で足軽に処理させる
+* result YAML が返る
+
+=== 8.3 B-2: 自動dispatch（watchdog）
+* tasks を監視して自動送信
+* results を監視して状態更新
+
+=== 8.4 B-3: Stage A との統合タスク
+* “docxbrief の要約ロジック改善” を足軽に投げる
+* “設計書更新” を別足軽に投げる（ドキュメント係）
+
+== 9. 付録：サンプル一式
+
+=== 9.1 Task例（要約改善）
+[source,yaml]
+----
+version: 1
+id: "TASK-20260128-a1b2"
+issued_at: "2026-01-28T14:00:00+09:00"
+issuer: "karo"
+assignee: "ashigaru1"
+title: "Improve section detection in summarize_text"
+objective: >
+  Make summaries follow original section order and pick meaningful first sentences.
+inputs:
+  repo_root: "."
+  files:
+    - "src/docxbrief/summarize.py"
+outputs:
+  expected:
+    - "b/results/RESULT-20260128-a1b2.yaml"
+acceptance:
+  - "Patch applies cleanly"
+  - "Explains verification with sample docx"
+constraints:
+  network: "disallow"
+  write_policy: "no_direct_edit"
+handoff:
+  return_to: "karo"
+----
