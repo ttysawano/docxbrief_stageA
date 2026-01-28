@@ -106,8 +106,12 @@ def _task_expected_path(task: dict) -> Optional[str]:
 
 
 def _send_line(target: str, line: str) -> None:
-    subprocess.check_call(["tmux", "send-keys", "-t", target, line])
-    subprocess.check_call(["tmux", "send-keys", "-t", target, "C-m"])
+    # Use literal mode for the message, and send Enter separately (twice for reliability).
+    subprocess.check_call(["tmux", "send-keys", "-t", target, "-l", line])
+    time.sleep(0.05)
+    subprocess.check_call(["tmux", "send-keys", "-t", target, "Enter"])
+    time.sleep(0.05)
+    subprocess.check_call(["tmux", "send-keys", "-t", target, "Enter"])
 
 
 def _expected_results(task: dict) -> list[Path]:
@@ -172,7 +176,7 @@ def dispatch_task(task_path: Path) -> None:
     if pane_id is None:
         raise RuntimeError(
             f"Cannot find pane with title '{assignee}' in tmux session '{session}'. "
-            f"Run: tmux list-panes -t {session} -a -F '#{pane_id} \"#{pane_title}\"'"
+            f"Run: tmux list-panes -t {session} -a -F '#{{pane_id}} \"#{{pane_title}}\"'"
         )
 
     expected = _task_expected_path(task)
