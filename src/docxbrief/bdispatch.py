@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import datetime as _dt
+import shlex
 import subprocess
 import time
-from typing import Iterable
+from typing import Iterable, Optional, Tuple
 
 import yaml
 
@@ -75,6 +76,40 @@ def _send_keys(target: str, lines: Iterable[str]) -> None:
     subprocess.check_call(["tmux", "send-keys", "-t", target, msg, "C-m"])
 
 
+def _tmux_check_session(session: str) -> None:
+    subprocess.check_call(["tmux", "has-session", "-t", session])
+
+
+def _tmux_find_pane_id_by_title(session: str, title: str) -> Optional[str]:
+    out = subprocess.check_output(
+        ["tmux", "list-panes", "-t", session, "-a", "-F", "#{pane_id}\t#{pane_title}"],
+        text=True,
+    )
+    for line in out.splitlines():
+        try:
+            pane_id, pane_title = line.split("\t", 1)
+        except ValueError:
+            continue
+        if pane_title.strip() == title:
+            return pane_id.strip()
+    return None
+
+
+def _task_expected_path(task: dict) -> Optional[str]:
+    try:
+        exp = task.get("outputs", {}).get("expected", [])
+        if isinstance(exp, list) and exp:
+            return str(exp[0])
+    except Exception:
+        pass
+    return None
+
+
+def _send_line(target: str, line: str) -> None:
+    subprocess.check_call(["tmux", "send-keys", "-t", target, line])
+    subprocess.check_call(["tmux", "send-keys", "-t", target, "C-m"])
+
+
 def _expected_results(task: dict) -> list[Path]:
     outputs = task.get("outputs", {})
     expected = outputs.get("expected", [])
@@ -127,19 +162,29 @@ def _task_info(task_path: Path) -> TaskInfo:
 
 
 def dispatch_task(task_path: Path) -> None:
-    info = _task_info(task_path)
+    task = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+    task_id = str(task.get("id", task_path.stem))
+    assignee = str(task.get("assignee", "ashigaru1"))
     session = _session_name()
-    target = _find_pane_target(session, info.assignee)
 
-    lines = [
-        f"Read task YAML at: {info.path.as_posix()}",
-        f"Write result YAML to: {', '.join(p.as_posix() for p in info.expected_results) or 'b/results/RESULT-*.yaml'}",
-        f"Follow write_policy: {info.write_policy}",
-    ]
+    _tmux_check_session(session)
+    pane_id = _tmux_find_pane_id_by_title(session, assignee)
+    if pane_id is None:
+        raise RuntimeError(
+            f"Cannot find pane with title '{assignee}' in tmux session '{session}'. "
+            f"Run: tmux list-panes -t {session} -a -F '#{pane_id} \"#{pane_title}\"'"
+        )
 
-    _send_keys(target, lines)
-    _write_lock(info.assignee, info.task_id)
-    _log_line(Path("b/logs/dispatch.log"), f"dispatch {info.task_id} -> {info.assignee} ({session})")
+    expected = _task_expected_path(task)
+
+    _send_line(pane_id, f"Read: {task_path.as_posix()}")
+    if expected:
+        _send_line(pane_id, f"You must create: {expected} (task_id={task_id})")
+    else:
+        _send_line(pane_id, f"Use task_id={task_id}. Write result YAML under b/results/.")
+
+    _write_lock(assignee, task_id)
+    _log_line(Path("b/logs/dispatch.log"), f"dispatch {task_id} -> {assignee} ({session}) pane={pane_id} expected={expected}")
 
 
 def _find_latest_result_by_task_id(task_id: str) -> Path | None:
