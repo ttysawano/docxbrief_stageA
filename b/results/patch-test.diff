@@ -1,0 +1,75 @@
+diff --git a/src/docxbrief/cli.py b/src/docxbrief/cli.py
+index 3ce62ba..eaa96f6 100644
+--- a/src/docxbrief/cli.py
++++ b/src/docxbrief/cli.py
+@@ -10,7 +10,7 @@ from .scan import scan_files
+ from .build import build_summary, update_summary
+ from .shell import run_shell
+ from .status import show_status
+-from .reset import reset_project
++from .reset import reset_project, clear_changelog
+@@ -44,6 +44,12 @@ def main(argv: list[str] | None = None) -> int:
+     p_reset.add_argument("--all", action="store_true", help="Also remove output summary.adoc")
+     p_reset.add_argument("--yes", action="store_true", help="Skip confirmation")
+ 
++    p_changelog = sub.add_parser("changelog", help="Changelog maintenance commands.")
++    ch_sub = p_changelog.add_subparsers(dest="ch_cmd", required=True)
++    p_ch_clear = ch_sub.add_parser("clear", help="Clear changelog entries (manifest + summary).")
++    _add_common_args(p_ch_clear)
++    p_ch_clear.add_argument("--yes", action="store_true", help="Skip confirmation")
++    p_ch_clear.add_argument("--no-render", action="store_true", help="Do not rewrite summary.adoc")
++
+     args = parser.parse_args(argv)
+@@ -79,6 +85,16 @@ def main(argv: list[str] | None = None) -> int:
+     if args.cmd == "status":
+         show_status(cfg)
+         return 0
+ 
++    if args.cmd == "changelog":
++        if args.ch_cmd == "clear":
++            if not args.yes:
++                print("This will clear changelog entries in .docxbrief/manifest.json" + (" and rewrite summary.adoc" if not args.no_render else "") + ".")
++                print("Re-run with --yes to proceed.")
++                return 2
++            clear_changelog(cfg, rewrite_output=not args.no_render)
++            print("Changelog cleared.")
++            return 0
++
+     if args.cmd == "reset":
+         if not args.yes:
+             print("This will delete .docxbrief/ (state)" + (" and summary.adoc" if args.all else "") + ".")
+             print("Re-run with --yes to proceed.")
+             return 2
+diff --git a/src/docxbrief/reset.py b/src/docxbrief/reset.py
+index 3c656d2..4c04878 100644
+--- a/src/docxbrief/reset.py
++++ b/src/docxbrief/reset.py
+@@ -1,8 +1,13 @@
+ from __future__ import annotations
+ 
++import datetime
+ import shutil
+ 
+ from .config import Config
++from .render import render_summary
++from .scan import scan_files
++from .state import ensure_state, load_manifest, save_manifest
+@@ -22,3 +27,21 @@ def reset_project(cfg: Config, *, remove_summary: bool = False, remove_state: bool = True) -> None:
+     if remove_summary:
+         out = cfg.output_adoc
+         if out.exists():
+             out.unlink()
++
++
++def clear_changelog(cfg: Config, *, rewrite_output: bool = True) -> None:
++    """Clear changelog entries in manifest, optionally re-render output."""
++    ensure_state(cfg)
++    manifest = load_manifest(cfg)
++    manifest["changelog"] = []
++    manifest["generated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
++    save_manifest(cfg, manifest)
++
++    if rewrite_output:
++        files = scan_files(cfg)
++        summaries = {k: v.get("summary", []) for k, v in manifest.get("files", {}).items()}
++        render_summary(cfg, files, summaries, manifest)

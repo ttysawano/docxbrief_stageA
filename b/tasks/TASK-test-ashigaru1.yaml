@@ -1,0 +1,23 @@
+version: 1
+id: "TASK-20260128-3f2a"
+issued_at: "2026-01-28T12:34:56+09:00"
+issuer: "shogun"
+assignee: "ashigaru1"
+title: "Implement reset command"
+objective: >
+  Add docxbrief reset + changelog clear commands.
+inputs:
+  repo_root: "."
+  files:
+    - "src/docxbrief/cli.py"
+outputs:
+  expected:
+    - "b/results/RESULT-20260128-3f2a.yaml"
+acceptance:
+  - "Provides patch or exact code edits"
+  - "Explains how to verify"
+constraints:
+  network: "disallow"
+  write_policy: "no_direct_edit"
+handoff:
+  return_to: "karo"

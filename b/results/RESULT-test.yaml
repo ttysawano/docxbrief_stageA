@@ -1,0 +1,19 @@
+version: 1
+task_id: "TASK-20260128-3f2a"
+assignee: "ashigaru1"
+status: "done"
+summary: >
+  Added a changelog clear command and helper to wipe manifest changelog and optionally re-render summary.
+artifacts:
+  patches:
+    - path: "b/results/patch-test.diff"
+      apply: "git apply b/results/patch-test.diff"
+verification:
+  steps:
+    - "pip install -e ."
+    - "docxbrief changelog clear --help"
+    - "docxbrief changelog clear --yes"
+risks:
+  - "If repo has diverged, patch may not apply cleanly."
+next_actions:
+  - "karo: review patch and apply if acceptable"
