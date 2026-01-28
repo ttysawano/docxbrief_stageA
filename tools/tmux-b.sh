@@ -28,7 +28,6 @@ tmux select-pane -T "ashigaru1"
 tmux select-pane -t "$SESSION:main.3"
 tmux select-pane -T "ashigaru2"
 
-tmux bind-key -T prefix d display-prompt -p "task yaml:" "run-shell 'cd \"$ROOT_DIR\"; docxbrief b dispatch %%'"
 
 start_codex='command -v codex >/dev/null 2>&1 && codex || { echo "codex not found; staying in shell"; exec "${SHELL:-/bin/bash}"; }'
 
