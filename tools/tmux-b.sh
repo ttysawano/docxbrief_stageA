@@ -45,8 +45,6 @@ send_lines() {
   for line in "$@"; do
     send_and_enter "$target" "$line"
   done
-  # Extra Enter to "unstick" UIs that buffer a final newline.
-  tmux send-keys -t "$target" Enter
 }
 
 # Start Codex (or fallback shell) in each pane
