@@ -33,3 +33,10 @@ def save_manifest(cfg: Config, manifest: dict) -> None:
     ensure_state(cfg)
     p = cfg.state_dir / "manifest.json"
     p.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def wipe_state(cfg: Config) -> None:
+    """Delete state directory (.docxbrief/)."""
+    import shutil
+    if cfg.state_dir.exists():
+        shutil.rmtree(cfg.state_dir)
