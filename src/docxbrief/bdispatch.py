@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import datetime as _dt
+import shlex
 import subprocess
 import time
-from typing import Iterable
+from typing import Iterable, Optional, Tuple
 
 import yaml
 
@@ -46,7 +47,10 @@ def _session_name() -> str:
 def _list_panes(session: str) -> list[tuple[str, str, str]]:
     fmt = "#{pane_id}\t#{pane_index}\t#{pane_title}"
     cmd = ["tmux", "list-panes", "-t", session, "-F", fmt]
-    out = subprocess.check_output(cmd, text=True)
+    try:
+        out = subprocess.check_output(cmd, text=True)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"tmux session not found: {session}") from exc
     panes = []
     for line in out.strip().splitlines():
         if not line.strip():
@@ -70,6 +74,44 @@ def _find_pane_target(session: str, assignee: str) -> str:
 def _send_keys(target: str, lines: Iterable[str]) -> None:
     msg = "\n".join(lines)
     subprocess.check_call(["tmux", "send-keys", "-t", target, msg, "C-m"])
+
+
+def _tmux_check_session(session: str) -> None:
+    subprocess.check_call(["tmux", "has-session", "-t", session])
+
+
+def _tmux_find_pane_id_by_title(session: str, title: str) -> Optional[str]:
+    out = subprocess.check_output(
+        ["tmux", "list-panes", "-t", session, "-a", "-F", "#{pane_id}\t#{pane_title}"],
+        text=True,
+    )
+    for line in out.splitlines():
+        try:
+            pane_id, pane_title = line.split("\t", 1)
+        except ValueError:
+            continue
+        if pane_title.strip() == title:
+            return pane_id.strip()
+    return None
+
+
+def _task_expected_path(task: dict) -> Optional[str]:
+    try:
+        exp = task.get("outputs", {}).get("expected", [])
+        if isinstance(exp, list) and exp:
+            return str(exp[0])
+    except Exception:
+        pass
+    return None
+
+
+def _send_line(target: str, line: str) -> None:
+    # Use literal mode for the message, and send Enter separately (twice for reliability).
+    subprocess.check_call(["tmux", "send-keys", "-t", target, "-l", line])
+    time.sleep(0.05)
+    subprocess.check_call(["tmux", "send-keys", "-t", target, "Enter"])
+    time.sleep(0.05)
+    subprocess.check_call(["tmux", "send-keys", "-t", target, "Enter"])
 
 
 def _expected_results(task: dict) -> list[Path]:
@@ -124,45 +166,67 @@ def _task_info(task_path: Path) -> TaskInfo:
 
 
 def dispatch_task(task_path: Path) -> None:
-    info = _task_info(task_path)
+    task = yaml.safe_load(task_path.read_text(encoding="utf-8"))
+    task_id = str(task.get("id", task_path.stem))
+    assignee = str(task.get("assignee", "ashigaru1"))
     session = _session_name()
-    target = _find_pane_target(session, info.assignee)
 
-    lines = [
-        f"Read task YAML at: {info.path.as_posix()}",
-        f"Write result YAML to: {', '.join(p.as_posix() for p in info.expected_results) or 'b/results/RESULT-*.yaml'}",
-        f"Follow write_policy: {info.write_policy}",
-    ]
+    _tmux_check_session(session)
+    pane_id = _tmux_find_pane_id_by_title(session, assignee)
+    if pane_id is None:
+        raise RuntimeError(
+            f"Cannot find pane with title '{assignee}' in tmux session '{session}'. "
+            f"Run: tmux list-panes -t {session} -a -F '#{{pane_id}} \"#{{pane_title}}\"'"
+        )
 
-    _send_keys(target, lines)
-    _write_lock(info.assignee, info.task_id)
-    _log_line(Path("b/logs/dispatch.log"), f"dispatch {info.task_id} -> {info.assignee} ({session})")
+    expected = _task_expected_path(task)
+
+    _send_line(pane_id, f"Read: {task_path.as_posix()}")
+    if expected:
+        _send_line(pane_id, f"You must create: {expected} (task_id={task_id})")
+    else:
+        _send_line(pane_id, f"Use task_id={task_id}. Write result YAML under b/results/.")
+
+    _write_lock(assignee, task_id)
+    _log_line(Path("b/logs/dispatch.log"), f"dispatch {task_id} -> {assignee} ({session}) pane={pane_id} expected={expected}")
 
 
-def _find_result_by_task_id(task_id: str) -> Path | None:
+def _find_latest_result_by_task_id(task_id: str) -> Path | None:
     results_dir = Path("b/results")
     if not results_dir.exists():
         return None
+    latest_path: Path | None = None
+    latest_mtime = -1.0
     for path in results_dir.glob("RESULT-*.yaml"):
         try:
             data = _load_yaml(path)
         except Exception:
             continue
         if str(data.get("task_id", "")).strip() == task_id:
-            return path
-    return None
+            mtime = path.stat().st_mtime
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                latest_path = path
+    return latest_path
 
 
-def await_result(task_path: Path, timeout: float) -> Path | None:
+def await_result(task_path: Path, timeout: float) -> tuple[Path | None, str]:
     info = _task_info(task_path)
     deadline = time.monotonic() + timeout
-    while True:
-        for expected in info.expected_results:
+    if info.expected_results:
+        expected = info.expected_results[0]
+        description = f"expected: {expected.as_posix()}"
+        while True:
             if expected.exists():
-                return expected
-        match = _find_result_by_task_id(info.task_id)
+                return expected, description
+            if time.monotonic() >= deadline:
+                return None, description
+            time.sleep(0.5)
+    description = f"searched: b/results/*.yaml with task_id == {info.task_id}"
+    while True:
+        match = _find_latest_result_by_task_id(info.task_id)
         if match is not None:
-            return match
+            return match, description
         if time.monotonic() >= deadline:
-            return None
+            return None, description
         time.sleep(0.5)

@@ -1,0 +1,22 @@
+version: 1
+id: "TASK-test"
+issued_at: "2026-01-28T12:34:56+09:00"
+issuer: "shogun"
+assignee: "ashigaru1"
+title: "Test dispatch"
+objective: >
+  Manual dispatch test for Stage B.
+inputs:
+  repo_root: "."
+  files:
+    - "b/tasks/TASK-test-ashigaru1.yaml"
+outputs:
+  expected:
+    - "b/results/RESULT-test.yaml"
+acceptance:
+  - "Creates b/results/RESULT-test.yaml"
+constraints:
+  network: "disallow"
+  write_policy: "no_direct_edit"
+handoff:
+  return_to: "karo"

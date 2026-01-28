@@ -50,15 +50,18 @@ def main(argv: list[str] | None = None) -> int:
     p_reset.add_argument("--all", action="store_true", help="Also remove output summary.adoc")
     p_reset.add_argument("--yes", action="store_true", help="Skip confirmation")
 
-    p_b = sub.add_parser("b", help="Stage B commands (tmux dispatch/await).")
+    p_b = sub.add_parser("b", help="Stage B helpers (tmux/Codex dispatcher).")
+    _add_common_args(p_b)
     b_sub = p_b.add_subparsers(dest="b_cmd", required=True)
 
     p_dispatch = b_sub.add_parser("dispatch", help="Dispatch a task YAML to the assignee pane.")
+    _add_common_args(p_dispatch)
     p_dispatch.add_argument("task_yaml", help="Path to task YAML (b/tasks/*.yaml)")
 
     p_await = b_sub.add_parser("await", help="Wait for result YAML for a task.")
+    _add_common_args(p_await)
     p_await.add_argument("task_yaml", help="Path to task YAML (b/tasks/*.yaml)")
-    p_await.add_argument("--timeout", type=float, default=30.0, help="Timeout seconds (default: 30)")
+    p_await.add_argument("--timeout", type=float, default=600.0, help="Timeout seconds (default: 600)")
 
     args = parser.parse_args(argv)
 
@@ -104,12 +107,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "b":
         if args.b_cmd == "dispatch":
-            dispatch_task(Path(args.task_yaml))
+            try:
+                dispatch_task(Path(args.task_yaml))
+            except RuntimeError as exc:
+                print(str(exc))
+                return 1
             return 0
         if args.b_cmd == "await":
-            result = await_result(Path(args.task_yaml), timeout=float(args.timeout))
+            result, info = await_result(Path(args.task_yaml), timeout=float(args.timeout))
             if result is None:
-                print("Result not found before timeout.")
+                print(f"Result not found before timeout. {info}")
                 return 1
             print(result.read_text(encoding="utf-8"))
             return 0
