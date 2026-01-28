@@ -16,6 +16,9 @@ tmux split-window -h -t "$SESSION:main"
 tmux split-window -v -t "$SESSION:main.0"
 tmux split-window -v -t "$SESSION:main.1"
 
+tmux set-option -t "$SESSION" pane-border-status top
+tmux set-option -t "$SESSION" pane-border-format "#[reverse] #T #[default]"
+
 tmux select-pane -t "$SESSION:main.0"
 tmux select-pane -T "shogun"
 tmux select-pane -t "$SESSION:main.1"
@@ -24,6 +27,8 @@ tmux select-pane -t "$SESSION:main.2"
 tmux select-pane -T "ashigaru1"
 tmux select-pane -t "$SESSION:main.3"
 tmux select-pane -T "ashigaru2"
+
+tmux bind-key -t "$SESSION" d display-prompt -p "task yaml:" "run-shell 'cd \"$ROOT_DIR\"; docxbrief b dispatch %%'"
 
 start_codex='command -v codex >/dev/null 2>&1 && codex || { echo "codex not found; staying in shell"; exec "${SHELL:-/bin/bash}"; }'
 
