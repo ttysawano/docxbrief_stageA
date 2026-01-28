@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docxbrief"
+version = "0.1.0"
+description = "Scan .docx files and generate an AsciiDoc summary with changelog (Stage A: LLM-free)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "YOUR NAME"}]
+dependencies = [
+  "python-docx>=1.1.0",
+  "PyYAML>=6.0.1",
+]
+
+[project.scripts]
+docxbrief = "docxbrief.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
