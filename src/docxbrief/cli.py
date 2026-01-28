@@ -9,6 +9,7 @@ from .scan import scan_files
 from .build import build_summary, update_summary
 from .shell import run_shell
 from .status import show_status
+from .reset import reset_project
 
 
 def _add_common_args(p: argparse.ArgumentParser) -> None:
@@ -43,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     p_status = sub.add_parser("status", help="Show current config and manifest overview.")
     _add_common_args(p_status)
 
+    p_reset = sub.add_parser("reset", help="Reset state (and optionally output) to avoid stale changelog.")
+    _add_common_args(p_reset)
+    p_reset.add_argument("--all", action="store_true", help="Also remove output summary.adoc")
+    p_reset.add_argument("--yes", action="store_true", help="Skip confirmation")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "init":
@@ -74,6 +80,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "status":
         show_status(cfg)
+        return 0
+
+    if args.cmd == "reset":
+        if not args.yes:
+            print("This will delete .docxbrief/ (state)" + (" and summary.adoc" if args.all else "") + ".")
+            print("Re-run with --yes to proceed.")
+            return 2
+        reset_project(cfg, remove_summary=bool(args.all), remove_state=True)
+        print("Reset complete.")
         return 0
 
     parser.print_help()
