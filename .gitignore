@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# docxbrief runtime artifacts
+.docxbrief/
+summary.adoc
+
+# optional: logs
+*.log

@@ -1,0 +1,37 @@
+project:
+  name: "DocxBrief"
+  description: "Scan .docx files and generate an AsciiDoc summary with changelog."
+  input_dir: "./docs"
+  output_adoc: "./summary.adoc"
+  state_dir: "./.docxbrief"
+
+scan:
+  include_glob:
+    - "**/*.docx"
+  exclude_glob:
+    - "**/~$*.docx"
+    - "**/.~lock.*"
+    - "**/._*.docx"
+
+filter:
+  filename_regex: []
+  max_files: 200
+
+extract:
+  max_chars_per_file: 12000
+
+summarize:
+  language: "ja"
+  mode: "heuristic"
+  focus:
+    - "目的"
+    - "結論"
+    - "決定事項"
+    - "TODO"
+  bullets_max: 8
+
+update:
+  detect_by: "sha256"
+  diff_context_lines: 2
+  changelog_section_title: "更新履歴"
+  changelog_mode: "append"
